@@ -85,3 +85,53 @@ describe('the spans of a line', () => {
     ])
   })
 })
+
+/**
+ * A sheet is drawn on the owner's tablet as it opens, so no line may make the
+ * reader slow. `(.*?)\s*#*\s*$` on a heading with a long run of spaces inside
+ * it took two minutes for 10,000 spaces (3,000 froze the page for seconds).
+ * Each line below once took from a tenth of a second to minutes; each must now
+ * take a moment.
+ */
+describe('a long run of spaces', () => {
+  const spaces = ' '.repeat(10_000)
+  const quickly = (md: string): ReturnType<typeof markdownBlocks> => {
+    const started = performance.now()
+    const blocks = markdownBlocks(md)
+    // A moment is about a millisecond here; a fault put back takes from a
+    // third of a second (the table and the link, at 40,000) to minutes.
+    expect(performance.now() - started).toBeLessThan(100)
+    return blocks
+  }
+
+  it('in a heading, before a word and after one', () => {
+    expect(quickly(`#${spaces}word`)).toEqual([
+      { kind: 'heading', level: 1, spans: [text('word')] }
+    ])
+    expect(quickly(`# a${spaces}word`)).toEqual([
+      { kind: 'heading', level: 1, spans: [text(`a${spaces}word`)] }
+    ])
+    quickly(`## a${spaces}#${spaces}word`)
+  })
+
+  it('under a table’s first row, and inside a link', () => {
+    const more = spaces.repeat(4)
+    quickly(`a | b\n---${more}x`)
+    quickly(`a | b\n${more}x`)
+    quickly(`[a](${more}x`)
+  })
+
+  it('still drops closing marks after a space, and keeps a mark inside a word', () => {
+    expect(markdownBlocks('## Notes ##\n# C#\n# ###')).toEqual([
+      { kind: 'heading', level: 2, spans: [text('Notes')] },
+      { kind: 'heading', level: 1, spans: [text('C#')] },
+      { kind: 'heading', level: 1, spans: [] }
+    ])
+  })
+
+  it('still reads a link with spaces around its address and a title', () => {
+    expect(inline('[the ledger]( ledger.md "the log" )')).toEqual([
+      { kind: 'link', href: 'ledger.md', spans: [text('the ledger')] }
+    ])
+  })
+})

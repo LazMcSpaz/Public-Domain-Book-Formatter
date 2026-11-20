@@ -37,11 +37,17 @@ export type MdBlock =
   | { kind: 'rule' }
 
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/u
-const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/u
+/**
+ * A heading line; its text is everything after the marks, trimmed and cut by
+ * `headingText`. Never `(.*?)\s*#*\s*$`: with a long run of spaces inside
+ * the text, that backtracks for minutes (3,000 spaces froze the page).
+ */
+const HEADING = /^\s{0,3}(#{1,6})\s(.*)$/u
 const RULE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/u
 const ITEM = /^(\s*)([-*+]|(\d{1,9})[.)])\s+(.*)$/u
 const QUOTE = /^\s{0,3}>\s?(.*)$/u
-const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/u
+/** Tested on a trimmed line: leading and trailing `\s*` around `\|?` backtrack on a long run of spaces. */
+const TABLE_RULE = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/u
 
 /** The blocks of a Markdown text. */
 export function markdownBlocks(text: string): MdBlock[] {
@@ -88,7 +94,11 @@ function blocksOf(lines: string[]): MdBlock[] {
     const heading = HEADING.exec(line)
     if (heading) {
       endPara()
-      blocks.push({ kind: 'heading', level: heading[1]!.length, spans: inline(heading[2]!) })
+      blocks.push({
+        kind: 'heading',
+        level: heading[1]!.length,
+        spans: inline(headingText(heading[2]!))
+      })
       i++
       continue
     }
@@ -105,7 +115,7 @@ function blocksOf(lines: string[]): MdBlock[] {
       blocks.push({ kind: 'quote', blocks: blocksOf(inner) })
       continue
     }
-    if (line.includes('|') && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]!)) {
+    if (line.includes('|') && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]!.trim())) {
       endPara()
       const head = cells(line)
       const rows: Span[][][] = []
@@ -127,6 +137,19 @@ function blocksOf(lines: string[]): MdBlock[] {
   }
   endPara()
   return blocks
+}
+
+/**
+ * A heading's text: trimmed, and closing marks dropped when a space comes
+ * before them (`## Notes ##`), as GitHub reads it; `C#` keeps its mark. Done
+ * in code, in one pass, so no run of spaces can make it slow.
+ */
+function headingText(raw: string): string {
+  const text = raw.trim()
+  let end = text.length
+  while (end > 0 && text[end - 1] === '#') end--
+  if (end === 0) return ''
+  return end < text.length && /\s/u.test(text[end - 1]!) ? text.slice(0, end).trimEnd() : text
 }
 
 /** A list from line `i`; returns the line after it. A switch between numbered and not starts a new list. */
@@ -232,11 +255,13 @@ export function inline(src: string): Span[] {
       }
       continue
     }
+    // `(?=(\s*))\2` takes the spaces after `(` once and never gives them back,
+    // so a long run of them is not tried split every way.
     const link =
-      c === '[' ? /^\[([^\]]*)\]\(\s*<?([^)\s>]*)>?(?:\s+"[^"]*")?\s*\)/u.exec(rest) : null
+      c === '[' ? /^\[([^\]]*)\]\((?=(\s*))\2<?([^)\s>]*)>?(?:\s+"[^"]*")?\s*\)/u.exec(rest) : null
     if (link) {
       flush()
-      out.push({ kind: 'link', href: link[2]!, spans: inline(link[1]!) })
+      out.push({ kind: 'link', href: link[3]!, spans: inline(link[1]!) })
       i += link[0].length
       continue
     }
