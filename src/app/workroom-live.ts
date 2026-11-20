@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ShelfConfig } from '@core/sync'
 import type { StatusNote, UnreadableNote } from '@core/work'
+import { notesFailure, type NotesFailure } from '../platform/browser/notes-failure'
 import { deviceNoteCache, readWorkNotes, type NoteCache } from '../platform/browser/shelf-notes'
 
 /**
@@ -15,6 +16,8 @@ import { deviceNoteCache, readWorkNotes, type NoteCache } from '../platform/brow
  * Each read is one request when nothing changed (`readWorkNotes` keeps notes
  * by blob sha, on the device too), so a minute is a gentle interval: an
  * hour of watching costs sixty small requests of GitHub's five thousand.
+ * Nothing is read while the page is hidden (`npm run check:workroom` hides it
+ * and waits).
  */
 export const REFRESH_MS = 60_000
 /** How often the "2 minutes ago" text and the stale rule look at the clock. */
@@ -27,7 +30,7 @@ export interface LiveNotes {
   readAt: number | null
   reading: boolean
   /** Why the last read failed, while the last good copy stays on screen. */
-  error: string | null
+  error: NotesFailure | null
   /** The clock, ticking, for every time the screen shows. */
   now: number
   refresh: () => void
@@ -42,7 +45,7 @@ export function useLiveNotes(config: ShelfConfig | null): LiveNotes {
   const [unreadable, setUnreadable] = useState<UnreadableNote[]>([])
   const [readAt, setReadAt] = useState<number | null>(null)
   const [reading, setReading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<NotesFailure | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const busy = useRef(false)
   const alive = useRef(true)
@@ -60,7 +63,7 @@ export function useLiveNotes(config: ShelfConfig | null): LiveNotes {
         setError(null)
       })
       .catch((err: unknown) => {
-        if (alive.current) setError(failureWords(err))
+        if (alive.current) setError(notesFailure(err))
       })
       .finally(() => {
         busy.current = false
@@ -72,34 +75,23 @@ export function useLiveNotes(config: ShelfConfig | null): LiveNotes {
 
   useEffect(() => {
     alive.current = true
-    refresh()
-    const visible = (): boolean => document.visibilityState === 'visible'
-    const every = window.setInterval(() => {
-      if (visible()) refresh()
-    }, REFRESH_MS)
-    const tick = window.setInterval(() => setNow(Date.now()), TICK_MS)
-    const onVisible = (): void => {
-      if (visible()) refresh()
+    // Only while the page is on screen: a hidden one reads when it is shown.
+    const whenVisible = (): void => {
+      if (document.visibilityState === 'visible') refresh()
     }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('online', refresh)
+    whenVisible()
+    const every = window.setInterval(whenVisible, REFRESH_MS)
+    const tick = window.setInterval(() => setNow(Date.now()), TICK_MS)
+    document.addEventListener('visibilitychange', whenVisible)
+    window.addEventListener('online', whenVisible)
     return () => {
       alive.current = false
       window.clearInterval(every)
       window.clearInterval(tick)
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('online', refresh)
+      document.removeEventListener('visibilitychange', whenVisible)
+      window.removeEventListener('online', whenVisible)
     }
   }, [refresh])
 
   return { notes, unreadable, readAt, reading, error, now, refresh }
-}
-
-/** A failed read in the owner's words: no answer at all is said as that, and nothing else is. */
-function failureWords(err: unknown): string {
-  const said = err instanceof Error ? err.message : String(err)
-  if (err instanceof Error && err.name === 'NoAnswer') {
-    return `Could not reach the shelf: the browser got no answer (it said “${said}”).`
-  }
-  return `Could not read the shelf: ${said}`
 }

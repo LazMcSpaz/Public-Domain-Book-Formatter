@@ -15,6 +15,7 @@ import {
   type Fact,
   type TagVocabulary
 } from '@core/harvest'
+import { keepSetting } from './device-write'
 
 const KEY_STORAGE = 'pdbf.apiKey'
 const PREFS_STORAGE = 'pdbf.prefs'
@@ -76,11 +77,9 @@ export function loadApiKey(): string {
   return safeLocalStorage()?.getItem(KEY_STORAGE) ?? ''
 }
 
-export function saveApiKey(key: string): void {
-  const store = safeLocalStorage()
-  if (!store) return
-  if (key.trim()) store.setItem(KEY_STORAGE, key.trim())
-  else store.removeItem(KEY_STORAGE)
+/** Save the API key on this device; why not, in words, or null when it was kept. */
+export function saveApiKey(key: string): string | null {
+  return keepSetting(safeLocalStorage(), KEY_STORAGE, key.trim() || null)
 }
 
 /** The shelf configuration, or empty strings when it has not been set up. */
@@ -101,16 +100,15 @@ export function loadShelf(): ShelfConfig {
   }
 }
 
-export function saveShelf(config: ShelfConfig): void {
-  const store = safeLocalStorage()
-  if (!store) return
+/** Save the shelf's settings on this device; why not, in words, or null when they were kept. */
+export function saveShelf(config: ShelfConfig): string | null {
   const clean: ShelfConfig = {
     repo: config.repo.trim(),
     branch: config.branch.trim() || 'main',
     token: config.token.trim()
   }
-  if (!clean.repo && !clean.token) store.removeItem(SHELF_STORAGE)
-  else store.setItem(SHELF_STORAGE, JSON.stringify(clean))
+  const empty = !clean.repo && !clean.token
+  return keepSetting(safeLocalStorage(), SHELF_STORAGE, empty ? null : JSON.stringify(clean))
 }
 
 /**

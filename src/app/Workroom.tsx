@@ -88,7 +88,7 @@ export function Workroom({ onClose }: { onClose: () => void }): JSX.Element {
           />
           <Stat figure={counts.doneThisWeek} words="jobs finished this week" />
         </div>
-        {live.error && live.readAt !== null ? <p className="wr-error">{live.error}</p> : null}
+        {live.error && live.readAt !== null ? <p className="wr-error">{live.error.band}</p> : null}
       </div>
 
       {!config ? (
@@ -100,7 +100,7 @@ export function Workroom({ onClose }: { onClose: () => void }): JSX.Element {
         </div>
       ) : live.readAt === null && live.notes.length === 0 ? (
         <div className="wr-empty">
-          <p>{live.error ?? 'Reading the shelf…'}</p>
+          <p>{live.error?.band ?? 'Reading the shelf…'}</p>
         </div>
       ) : empty ? (
         <div className="wr-empty" data-empty="true">
@@ -205,12 +205,12 @@ function LiveLight({ live, hasShelf }: { live: LiveNotes; hasShelf: boolean }): 
     : null
   const state = live.error ? 'off' : age ? 'on' : 'wait'
   return (
-    <span className={`wr-live wr-live-${state}`} data-live={state} title={live.error ?? undefined}>
+    <span className={`wr-live wr-live-${state}`} data-live={state} title={live.error?.band}>
       <span className="wr-dot-live" />
       {live.error
         ? age
-          ? `could not reach the shelf · showing what was read ${age}`
-          : 'could not reach the shelf'
+          ? `${live.error.light} · showing what was read ${age}`
+          : live.error.light
         : age
           ? `live from the shelf · ${age}`
           : 'reading the shelf…'}

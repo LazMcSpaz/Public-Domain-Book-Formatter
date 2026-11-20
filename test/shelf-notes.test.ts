@@ -1,86 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createHash } from 'node:crypto'
-import { deviceNoteCache, memoryNoteCache, readWorkNotes } from '@platform/browser/shelf-notes'
-import { noteAsk, serializeStatusNote, startNote, type StatusNote } from '@core/work'
-import { statusNotePath, type ShelfConfig } from '@core/sync'
+import { memoryNoteCache, readWorkNotes } from '@platform/browser/shelf-notes'
+import { noteAsk, serializeStatusNote, startNote } from '@core/work'
+import { statusNotePath } from '@core/sync'
+import { API, blobsIn, config, note, sha, shelfOf, stubGitHub } from './fixtures/notes-github'
 
 /**
- * The Workroom's reader against a stand-in for GitHub: one trees request lists
- * every note with its blob sha, and a note is fetched only when its sha is
- * new. The books and jobs are made up.
+ * The Workroom's reader against a stand-in for GitHub (`fixtures/notes-github.ts`):
+ * one trees request lists every note with its blob sha, and a note is fetched
+ * only when its sha is new. The books and jobs are made up. The copy kept on
+ * the device is `workroom-device-notes.test.ts`.
  */
-const config: ShelfConfig = { repo: 'someone/shelf', branch: 'main', token: 't' }
-const API = 'https://api.github.com/repos/someone/shelf'
-
-const sha = (text: string): string =>
-  createHash('sha1')
-    .update(Buffer.concat([Buffer.from(`blob ${Buffer.byteLength(text)}\0`), Buffer.from(text)]))
-    .digest('hex')
-
-function note(id: string, book: string | null, job = 'Read the first batch'): StatusNote {
-  return startNote({
-    id,
-    role: 'reader',
-    book,
-    stage: book ? 'reading' : null,
-    job,
-    now: '2026-10-02T09:00:00Z'
-  })
-}
-
-/** A shelf: note files by path from the shelf's top. */
-type Shelf = Map<string, string>
-const shelfOf = (...notes: StatusNote[]): Shelf =>
-  new Map(notes.map((n) => [statusNotePath(n), serializeStatusNote(n)]))
-
-interface Seen {
-  url: string
-  cache: RequestCache | undefined
-  accept: string
-}
-
-/** GitHub as far as the reader needs it; `extra` answers anything else first. */
-function stubGitHub(shelf: () => Shelf, extra?: (url: URL) => Response | null): Seen[] {
-  const seen: Seen[] = []
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input))
-    const accept = String((init?.headers as Record<string, string>)?.['Accept'] ?? '')
-    seen.push({ url: String(input), cache: init?.cache, accept })
-    const json = (status: number, body: unknown) =>
-      new Response(JSON.stringify(body), {
-        status,
-        headers: { 'content-type': 'application/json' }
-      })
-    const answer = extra?.(url)
-    if (answer) return Promise.resolve(answer)
-    const files = shelf()
-    if (url.pathname.startsWith('/repos/someone/shelf/git/trees/main:work/runs')) {
-      if (files.size === 0) return Promise.resolve(json(404, { message: 'Not Found' }))
-      const tree = [...files].map(([path, text]) => ({
-        path: path.replace(/^work\/runs\//u, ''),
-        type: 'blob',
-        sha: sha(text)
-      }))
-      const months = [...new Set(tree.map((e) => e.path.split('/')[0]!))]
-      const dirs = months.map((m) => ({ path: m, type: 'tree', sha: `tree-${m}` }))
-      return Promise.resolve(
-        json(200, { sha: 'runs-tree', truncated: false, tree: [...dirs, ...tree] })
-      )
-    }
-    const blob = /\/git\/blobs\/([0-9a-f]+)$/u.exec(url.pathname)
-    if (blob) {
-      const text = [...files.values()].find((t) => sha(t) === blob[1])
-      return Promise.resolve(text === undefined ? json(404, {}) : new Response(text))
-    }
-    if (url.pathname === '/repos/someone/shelf') {
-      return Promise.resolve(json(200, { full_name: 'someone/shelf', private: true }))
-    }
-    return Promise.resolve(json(404, { message: 'Not Found' }))
-  }) as typeof fetch
-  return seen
-}
-
-const blobsIn = (seen: Seen[]) => seen.filter((s) => s.url.includes('/git/blobs/'))
 const real = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = real
@@ -198,6 +127,16 @@ describe('reading the status notes', () => {
     await expect(readWorkNotes(config, memoryNoteCache())).rejects.toThrow(/no such repository/u)
   })
 
+  it('names a branch the shelf does not have, rather than showing an empty board', async () => {
+    const shelf = shelfOf(note('aaaa1111', null))
+    const seen = stubGitHub(() => shelf)
+    const wrong = { ...config, branch: 'mian' }
+    const read = readWorkNotes(wrong, memoryNoteCache())
+    await expect(read).rejects.toThrow(/no branch called “mian”.*usual branch is “main”/u)
+    await expect(read).rejects.toMatchObject({ name: 'NoSuchBranch' })
+    expect(seen.some((s) => s.url.startsWith(`${API}/git/ref/heads/mian?unshared=`))).toBe(true)
+  })
+
   it('keeps nothing whose bytes do not match its fingerprint, and asks again next time', async () => {
     const shelf = shelfOf(note('aaaa1111', null))
     const seen = stubGitHub(
@@ -208,6 +147,8 @@ describe('reading the status notes', () => {
     const read = await readWorkNotes(config, cache)
     expect(read.notes).toEqual([])
     expect(read.unreadable[0]!.problems[0]).toMatch(/fingerprint/u)
+    // Asked for, and not kept: nothing was fetched.
+    expect(read.fetched).toBe(0)
     seen.length = 0
     await readWorkNotes(config, cache)
     expect(blobsIn(seen)).toHaveLength(1)
@@ -237,62 +178,5 @@ describe('reading the status notes', () => {
     const read = await readWorkNotes(config, memoryNoteCache())
     expect(read.notes.map((n) => n.id)).toEqual(['aaaa1111'])
     expect(seen.filter((s) => s.url.includes('/git/trees/'))).toHaveLength(3)
-  })
-})
-
-describe('the cache kept on the device', () => {
-  function fakeStorage(): Storage {
-    const items = new Map<string, string>()
-    return {
-      getItem: (k: string) => items.get(k) ?? null,
-      setItem: (k: string, v: string) => void items.set(k, v),
-      removeItem: (k: string) => void items.delete(k),
-      clear: () => items.clear(),
-      key: () => null,
-      get length() {
-        return items.size
-      }
-    }
-  }
-
-  it('serves a reopened app from the device, trimmed to what the shelf lists', async () => {
-    const storage = fakeStorage()
-    const shelf = shelfOf(note('aaaa1111', null), note('bbbb2222', null))
-    const seen = stubGitHub(() => shelf)
-    await readWorkNotes(config, deviceNoteCache(storage))
-    seen.length = 0
-    const reopened = await readWorkNotes(config, deviceNoteCache(storage))
-    expect(blobsIn(seen)).toHaveLength(0)
-    expect(reopened.notes).toHaveLength(2)
-    shelf.delete([...shelf.keys()][0]!)
-    await readWorkNotes(config, deviceNoteCache(storage))
-    expect(Object.keys(JSON.parse(storage.getItem('pdbf.workroom.notes')!))).toHaveLength(1)
-  })
-
-  it('still works when the device refuses to store it', async () => {
-    const storage = fakeStorage()
-    storage.setItem = () => {
-      throw new Error('QuotaExceededError')
-    }
-    stubGitHub(() => shelfOf(note('aaaa1111', null)))
-    const read = await readWorkNotes(config, deviceNoteCache(storage))
-    expect(read.notes).toHaveLength(1)
-  })
-
-  it('writes to the device only after a read that changed something', async () => {
-    const storage = fakeStorage()
-    let writes = 0
-    const set = storage.setItem.bind(storage)
-    storage.setItem = (k: string, v: string) => {
-      writes++
-      set(k, v)
-    }
-    const shelf = shelfOf(note('aaaa1111', null))
-    stubGitHub(() => shelf)
-    const cache = deviceNoteCache(storage)
-    await readWorkNotes(config, cache)
-    await readWorkNotes(config, cache)
-    await readWorkNotes(config, cache)
-    expect(writes).toBe(1)
   })
 })

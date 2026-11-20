@@ -2,6 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { prepareInstall } from '../platform/browser/install'
+import { forgetOldNoteCopy } from '../platform/browser/note-store'
 import { Settings } from './Settings'
 import { applyTheme, readTheme } from './theme'
 import { Workroom } from './Workroom'
@@ -60,6 +61,10 @@ applyTheme(readTheme())
 // service worker to draw its first screen would be an app that does not open
 // when the worker cannot be registered.
 void prepareInstall()
+
+// The first Workroom kept its notes in `localStorage`, where they could crowd
+// out the shelf's token; they live in the app's database now (`note-store.ts`).
+forgetOldNoteCopy()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

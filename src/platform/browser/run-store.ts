@@ -43,11 +43,13 @@ const DB_NAME = 'pdbf'
  * source PDF itself; v4 added `recon`, the free-but-slow reading of it; v5
  * added `batches`, the tickets for books submitted and not yet collected; v6
  * added `notes`, what an interrupted annotation pass had already bought; v7
- * added `outbox`, the changes made here that the shelf has not taken yet. The
- * upgrade handler below creates whichever stores are missing rather than
- * switching on the old version, so a database at any version arrives complete.
+ * added `outbox`, the changes made here that the shelf has not taken yet; v8
+ * added `workroom-notes`, the Workroom's copy of the status notes
+ * (`note-store.ts`). The upgrade handler below creates whichever stores are
+ * missing rather than switching on the old version, so a database at any
+ * version arrives complete.
  */
-const DB_VERSION = 7
+const DB_VERSION = 8
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
@@ -55,6 +57,8 @@ const RECON_STORE = 'recon'
 const BATCH_STORE = 'batches'
 const NOTES_STORE = 'notes'
 const OUTBOX_STORE = 'outbox'
+/** The Workroom's notes by blob sha; read and written only by `note-store.ts`. */
+export const WORKROOM_NOTES_STORE = 'workroom-notes'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -129,6 +133,11 @@ function openDb(): Promise<IDBDatabase | null> {
         const store = db.createObjectStore(OUTBOX_STORE, { keyPath: 'id' })
         store.createIndex('bookKey', 'bookKey')
       }
+      if (!db.objectStoreNames.contains(WORKROOM_NOTES_STORE)) {
+        // The status notes the Workroom has read, keyed by blob sha. A copy of
+        // what is on the shelf, never anything else: losing it costs requests.
+        db.createObjectStore(WORKROOM_NOTES_STORE, { keyPath: 'sha' })
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -136,14 +145,19 @@ function openDb(): Promise<IDBDatabase | null> {
   })
 }
 
-function promisify<T>(request: IDBRequest<T>): Promise<T> {
+export function promisify<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'))
   })
 }
 
-async function withStore<T>(
+/**
+ * One transaction on one store: null when there is no database or anything in
+ * it fails, never a throw. Shared with `note-store.ts`, so every store opens
+ * the one database at the one version.
+ */
+export async function withStore<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => Promise<T>,
   name: string = STORE

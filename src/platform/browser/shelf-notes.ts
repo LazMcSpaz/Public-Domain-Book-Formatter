@@ -27,6 +27,7 @@
  */
 import { RUNS_ROOT, notesInRunsTree, type RunsTreeEntry, type ShelfConfig } from '@core/sync'
 import { readNotes, type NoteFile, type ReadNotes, type UnreadableNote } from '@core/work'
+import { databaseNotes, type DeviceNotes } from './note-store'
 import { ShelfError, checkShelf } from './shelf'
 import { blobSha } from './shelf-attempt'
 import { reach } from './shelf-fetch'
@@ -34,6 +35,8 @@ import { API, NO_CACHE, headers, unshared } from './shelf-request'
 
 /** Notes' text by blob sha. A sha names one content forever, so an entry never goes stale. */
 export interface NoteCache {
+  /** Bring in what the device kept; a read waits for it before asking for any note. */
+  ready(): Promise<void>
   get(sha: string): string | undefined
   set(sha: string, text: string): void
   /** Forget every note the shelf no longer lists, and keep the rest. */
@@ -44,6 +47,7 @@ export interface NoteCache {
 export function memoryNoteCache(): NoteCache {
   const notes = new Map<string, string>()
   return {
+    ready: () => Promise.resolve(),
     get: (sha) => notes.get(sha),
     set: (sha, text) => void notes.set(sha, text),
     keepOnly: (shas) => {
@@ -52,61 +56,71 @@ export function memoryNoteCache(): NoteCache {
   }
 }
 
-const DEVICE_KEY = 'pdbf.workroom.notes'
+export interface DeviceNoteCache extends NoteCache {
+  /** Resolves once every write to the device asked for so far has been tried. */
+  saved(): Promise<void>
+}
 
 /**
- * A cache kept on the device as well, so reopening the app fetches only what
- * changed while it was closed. Written after a read that changed it, trimmed
- * to what the shelf lists; a read that changed nothing writes nothing. A
- * device that will not store it (private browsing, storage full) still has
- * this page's copy: a lost cache costs requests, never a note.
+ * A cache kept on the device as well (`note-store.ts`: the app's database,
+ * never `localStorage`), so reopening the app fetches only what changed while
+ * it was closed. Written after a read that changed it, trimmed to what the
+ * shelf lists; a read that changed nothing writes nothing. The write is never
+ * waited for, so a slow or refused one cannot hold up the screen; a refused
+ * one is tried again after the next read. A device that keeps nothing (no
+ * database) has this page's copy only: a lost cache costs requests, never a
+ * note.
  */
-export function deviceNoteCache(storage: Storage | null = deviceStorage()): NoteCache {
+export function deviceNoteCache(device: DeviceNotes | null = databaseNotes()): DeviceNoteCache {
   const notes = new Map<string, string>()
-  try {
-    const stored = JSON.parse(storage?.getItem(DEVICE_KEY) ?? '{}') as unknown
-    if (stored && typeof stored === 'object') {
-      for (const [sha, text] of Object.entries(stored)) {
-        if (typeof text === 'string') notes.set(sha, text)
-      }
-    }
-  } catch {
-    /* an unreadable record is an empty cache */
-  }
-  let changed = false
+  /** Notes fetched since the last write, and whether any note has gone since. */
+  const added = new Map<string, string>()
+  let trimmed = false
+  let store = device
+  let loading: Promise<void> | null = null
+  let saving: Promise<void> = Promise.resolve()
   return {
+    ready: () =>
+      (loading ??= (async () => {
+        const kept = await store?.load().catch(() => null)
+        if (!kept) {
+          store = null
+          return
+        }
+        for (const [sha, text] of kept) if (!notes.has(sha)) notes.set(sha, text)
+      })()),
     get: (sha) => notes.get(sha),
     set: (sha, text) => {
       notes.set(sha, text)
-      changed = true
+      added.set(sha, text)
     },
     keepOnly: (shas) => {
       for (const sha of [...notes.keys()]) {
-        if (!shas.has(sha)) changed = notes.delete(sha) || changed
+        if (!shas.has(sha)) trimmed = notes.delete(sha) || trimmed
       }
-      if (!changed) return
-      changed = false
-      try {
-        storage?.setItem(DEVICE_KEY, JSON.stringify(Object.fromEntries(notes)))
-      } catch {
-        /* storage full or refused: this page's copy still serves */
-      }
-    }
-  }
-}
-
-function deviceStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage
-  } catch {
-    return null
+      const target = store
+      if (!target || (added.size === 0 && !trimmed)) return
+      const add = new Map(added)
+      const keep = new Set(shas)
+      added.clear()
+      trimmed = false
+      saving = saving.then(async () => {
+        const ok = await target.save(add, keep).catch(() => false)
+        if (ok) return
+        // Refused (storage full, or the database busy): try again after the next read.
+        trimmed = true
+        for (const [sha, text] of add)
+          if (notes.get(sha) === text && !added.has(sha)) added.set(sha, text)
+      })
+    },
+    saved: () => saving
   }
 }
 
 export interface WorkNotes extends ReadNotes {
   /** How many note files the shelf lists. */
   listed: number
-  /** How many of them were fetched by this read (new or changed). */
+  /** How many notes this read fetched and kept (new or changed); a failed fetch is not one. */
   fetched: number
 }
 
@@ -115,7 +129,7 @@ const AT_ONCE = 6
 
 /** Every note on the shelf, fetching only those the cache does not hold. */
 export async function readWorkNotes(config: ShelfConfig, cache: NoteCache): Promise<WorkNotes> {
-  const listing = await listRuns(config)
+  const [listing] = await Promise.all([listRuns(config), cache.ready()])
   const wanted = notesInRunsTree(listing)
   const files: NoteFile[] = []
   const unreadable: UnreadableNote[] = []
@@ -124,11 +138,13 @@ export async function readWorkNotes(config: ShelfConfig, cache: NoteCache): Prom
     ...new Map(wanted.filter((w) => cache.get(w.sha) === undefined).map((w) => [w.sha, w])).values()
   ]
   let next = 0
+  let fetched = 0
   const worker = async (): Promise<void> => {
     while (next < missing.length) {
       const note = missing[next++]!
       const problem = await fetchNote(config, note.sha, cache)
       if (problem) unreadable.push({ path: note.path, problems: [problem] })
+      else fetched++
     }
   }
   await Promise.all(Array.from({ length: Math.min(AT_ONCE, missing.length) }, worker))
@@ -142,7 +158,7 @@ export async function readWorkNotes(config: ShelfConfig, cache: NoteCache): Prom
     notes: read.notes,
     unreadable: [...read.unreadable, ...unreadable].sort((a, b) => cmp(a.path, b.path)),
     listed: wanted.length,
-    fetched: missing.length
+    fetched
   }
 }
 
@@ -160,8 +176,9 @@ async function listRuns(config: ShelfConfig): Promise<RunsTreeEntry[]> {
   })
   if (response.status === 404 || response.status === 409) {
     // No `work/runs` yet, which is a shelf no agent has reported to; or a
-    // repository the token cannot see, which `checkShelf` names as that.
-    await checkShelf(config)
+    // repository the token cannot see, or a branch the shelf does not have,
+    // each named as that rather than shown as an empty board.
+    await confirmBranch(config)
     return []
   }
   if (!response.ok) throw refused(response, 'listing the status notes')
@@ -174,6 +191,33 @@ async function listRuns(config: ShelfConfig): Promise<RunsTreeEntry[]> {
     for (const e of inside.entries) entries.push({ ...e, path: `${month.path}/${e.path}` })
   }
   return entries
+}
+
+/** The branch Settings names, on a shelf the token can see: if not, a plain reason. */
+async function confirmBranch(config: ShelfConfig): Promise<void> {
+  const shelf = await checkShelf(config)
+  const branch = config.branch.split('/').map(encodeURIComponent).join('/')
+  const response = await reach(gitReadUrl(config, `ref/heads/${branch}`), {
+    headers: headers(config),
+    cache: NO_CACHE
+  })
+  // 409 is GitHub's answer for a repository with nothing in it yet: no notes.
+  if (response.ok || response.status === 409) return
+  if (response.status === 404)
+    throw new NoSuchBranch(config.branch, shelf.repo, shelf.defaultBranch)
+  throw refused(response, 'checking the shelf’s branch')
+}
+
+/** Settings names a branch the shelf does not have. */
+export class NoSuchBranch extends ShelfError {
+  constructor(branch: string, repo: string, usual: string) {
+    super(
+      `The shelf ${repo} has no branch called “${branch}”, so there are no notes to read there. ` +
+        `Its usual branch is “${usual}”: correct the branch in Settings.`,
+      404
+    )
+    this.name = 'NoSuchBranch'
+  }
 }
 
 async function treeAt(config: ShelfConfig, sha: string): Promise<ParsedTree> {

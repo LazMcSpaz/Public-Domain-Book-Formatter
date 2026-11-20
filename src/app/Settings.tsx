@@ -35,6 +35,7 @@ import { validRepo, type ShelfConfig } from '@core/sync'
 import { validSession } from '@core/control'
 import { checkShelf } from '../platform/browser/shelf'
 import { pushStoredBook } from '../platform/browser/shelf-save'
+import { WorkroomStorage } from './WorkroomStorage'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import {
   deleteAllSourceFiles,
@@ -338,7 +339,8 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                 className="primary"
                 disabled={keyDraft.trim().length === 0}
                 onClick={() => {
-                  saveApiKey(keyDraft)
+                  const refused = saveApiKey(keyDraft)
+                  if (refused) return setNote(`The key was not saved. ${refused}`)
                   setKey(keyDraft.trim())
                   setKeyDraft('')
                   setNote('Key saved.')
@@ -426,7 +428,13 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                   setShelfNote(null)
                   void checkShelf(next)
                     .then((info) => {
-                      saveShelf(next)
+                      const refused = saveShelf(next)
+                      if (refused) {
+                        setShelfNote(
+                          `The shelf answered, but the connection was not kept. ${refused}`
+                        )
+                        return
+                      }
                       setShelf(next)
                       setShelfToken('')
                       // Said plainly, because the first save is what publishes
@@ -658,6 +666,7 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                 Remove every stored reading
               </button>
             </div>
+            <WorkroomStorage onNote={setNote} />
 
             <h3>Books</h3>
             {runs.length === 0 ? (
