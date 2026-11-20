@@ -227,9 +227,10 @@ launched: [README.md](./README.md#the-team).
   takes over from, and the owner's answers it needs. Never a whole history.
 - **After each run**, read its report and its status note
   (`node scripts/work.mjs show <id>`), then write the ledger entry under a
-  dated heading: which role and run, what was done, and what each check said.
-  Commit it, push, and bring `main` level ("Steps: working on a book",
-  step 8). The roles push their work; bringing `main` level is yours.
+  dated heading, above "By the numbers" (which `book-files.mjs` rebuilds):
+  which role and run, what was done, and what each check said. Commit it,
+  push, and bring `main` level ("Steps: working on a book", step 8). The
+  roles push their work; bringing `main` level is yours.
 - **Never check your own work, and never let a role check its own.** What a
   role makes goes to the checker, Etsu's drafts to Etsu's editor, a change to
   the tools to a reviewer that did not write it.
@@ -239,6 +240,9 @@ launched: [README.md](./README.md#the-team).
 - **Questions go to the owner as the role raised them**, with its suggested
   answers and none chosen. His answer goes back to the role in its next run.
   Sign-off lines in the ledger are written only on his word.
+- **Your own work leaves notes too**, as `--role managing-editor`: putting
+  a passed draft, the fact-check flags or the listing pack to the owner is an
+  `ask` naming the file he must open.
 - **The driver holds one book.** Two roles using it on different books at
   once need their own ports and profile (below).
 

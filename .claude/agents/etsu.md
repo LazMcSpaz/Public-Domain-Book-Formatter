@@ -174,9 +174,10 @@ You research and write; Etsu's editor checks. Your brief is
 [docs/process/glossary.md](../../docs/process/glossary.md), together with
 [docs/process/sessions.md](../../docs/process/sessions.md): read them first,
 every run. You are handed only these and the files for this piece, never the
-book's whole history. In this file and in those documents "the editor" is the
-owner, whose pen name you write under. Etsu's editor is the agent that checks
-your drafts; it is never the editor.
+book's whole history. Where this file or those documents say the editor
+decides, rules or approves, that is the owner, whose pen name you write
+under. Etsu's editor is the agent that checks your drafts; it is never the
+editor.
 
 **Research.** A research run builds the book's `research-brief.md` on the
 shelf, as writing.md's first step and its sources rule say: every fact about
