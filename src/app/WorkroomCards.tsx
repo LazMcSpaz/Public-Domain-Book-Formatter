@@ -46,7 +46,8 @@ const PILL: Readonly<Record<Shown, string>> = {
 export function Pill({ shown, extra }: { shown: Shown; extra?: string }): JSX.Element {
   return (
     <span className={`wr-pill wr-pill-${PILL[shown]}`}>
-      {SHOWN_LABELS[shown]}
+      {/* A stale run's pill says how long it has been quiet, so "stale" alone. */}
+      {extra && shown === 'stale' ? 'stale' : SHOWN_LABELS[shown]}
       {extra ? ` · ${extra}` : ''}
     </span>
   )
@@ -112,13 +113,11 @@ export function LinkChips({
 export function RunCard({
   run,
   now,
-  act,
-  showRole = false
+  act
 }: {
   run: RunView
   now: number
   act: WorkroomActions
-  showRole?: boolean
 }): JSX.Element {
   return (
     <button
@@ -127,14 +126,9 @@ export function RunCard({
       data-run={run.id}
       onClick={() => act.openRun(run.id)}
     >
-      <div className="wr-t">
-        {runTitle(run)}
-        {run.stage ? (
-          <span className="wr-stage"> · {STAGE_LABELS[run.stage].toLowerCase()}</span>
-        ) : null}
-      </div>
+      {run.stage ? <div className="wr-stage">{STAGE_LABELS[run.stage]}</div> : null}
+      <div className="wr-t">{runTitle(run)}</div>
       <div className="wr-s">{run.job}</div>
-      {showRole ? <div className="wr-m2">{ROLE_LABELS[run.role]}</div> : null}
       {run.progress && run.shown !== 'done' ? <Bar progress={run.progress} /> : null}
       {run.result && run.shown !== 'working' ? <div className="wr-result">{run.result}</div> : null}
       <Pill shown={run.shown} extra={lastWord(run, now)} />

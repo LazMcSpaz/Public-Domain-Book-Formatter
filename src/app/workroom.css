@@ -140,7 +140,7 @@
 /* --- the page --- */
 .wr-wrap {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 18px;
   padding: 20px 28px 10px;
   align-items: start;
@@ -335,7 +335,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 14px;
-  align-items: start;
 }
 .wr-lane {
   border-radius: 14px;
@@ -415,8 +414,11 @@
   margin-bottom: 3px;
 }
 .wr-stage {
-  color: var(--wr-muted);
-  font-size: 14px;
+  color: #a8874a;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 1px;
 }
 .wr-s {
   color: var(--wr-soft);
@@ -692,10 +694,12 @@
 .wr-md h3,
 .wr-md h4,
 .wr-md h5,
-.wr-md h6,
-.wr-md h7 {
+.wr-md h6 {
   font-family: var(--wr-title);
   font-weight: 400;
+  font-size: 17px;
+  letter-spacing: normal;
+  color: var(--wr-ink);
   margin: 18px 0 6px;
 }
 .wr-md h2 {
@@ -781,7 +785,7 @@
 /* --- tablet in portrait, phone --- */
 @media (max-width: 900px) {
   .wr-wrap {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     padding: 16px 16px 8px;
   }
   .wr-band {
@@ -806,7 +810,7 @@
     font-size: 26px;
   }
   .wr-board {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .wr-sheet {
     padding: 14px 14px 18px;
