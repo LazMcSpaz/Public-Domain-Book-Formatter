@@ -91,12 +91,6 @@ export function figureFramePt(geometry: CoverGeometry): {
  * centre rather than sitting to one side of it.
  */
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
-  // The doorway, which the plate already centres: Knapp drew it square on.
-  'candidate-at-the-gates': 0.5,
-  // The sitter's own centre: the photograph is composed square on.
-  sinnett: 0.5,
-  // A field, not a figure: any part of it is as good a centre as another.
-  'mahatma-hands': 0.5,
   // The circle's centre, measured by a least-squares fit to its ink and made
   // the box's centre by padding the viewBox, as the eye's pupil is.
   'chain-of-globes': 0.5,
@@ -158,10 +152,6 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
  * what would say so.
  */
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
-  // Nothing to move: the anchor is the picture's own centre.
-  'candidate-at-the-gates': 1,
-  sinnett: 1,
-  'mahatma-hands': 1,
   'chain-of-globes': 1,
   'chain-of-globes-wide': 1,
   'theosophical-seal': 1,

@@ -122,7 +122,7 @@ describe('every cover the composer makes can be flattened', () => {
       author: 'M. P. Hall',
       subtitle: 'A Subtitle',
       blurb: 'Copy.',
-      isbn: '9798164602758'
+      isbn: '9798000001011'
     }
     patch(d)
     return d
@@ -139,7 +139,7 @@ describe('every cover the composer makes can be flattened', () => {
     [
       'a framed plate',
       (d) => {
-        d.look.groundFigure = 'candidate-at-the-gates'
+        d.look.groundFigure = 'arcade'
         d.look.groundFigureInFrame = true
         d.look.frontFrame = 'double'
         d.look.groundFigureOpacity = 0.08

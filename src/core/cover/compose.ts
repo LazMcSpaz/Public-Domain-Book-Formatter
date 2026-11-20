@@ -46,6 +46,7 @@ import { layBackCover, laySpine } from './compose-back'
 import { layBarcode } from './compose-barcode'
 import { FRAME_CLEARANCE_IN, FRAME_INSET_IN } from './compose-constants'
 import { layFrontCover } from './compose-front'
+import { frameStrokeIn } from './compose-frame'
 import { type ComposeOptions, type ComposedCover, type CoverItem } from './compose-items'
 export {
   BARCODE_ID,
@@ -57,7 +58,7 @@ export {
   MIN_MARK_WIDTH_IN,
   PRESS_MARK_ID
 } from './compose-constants'
-export { blurbFrame, fitArt, frontTypeArea } from './compose-frame'
+export { blurbFrame, fitArt, frameStrokeIn, frontTypeArea } from './compose-frame'
 export {
   type ComposeOptions,
   type ComposedCover,
@@ -170,7 +171,11 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
     // sizes of one. A wrap runs the whole sheet; a bled figure runs the front
     // panel off three edges; a framed one is a plate standing inside the
     // border, which is what a picture with its own architecture wants.
-    const framed = framedFigureFrame(geometry, FRAME_INSET_IN, FRAME_CLEARANCE_IN)
+    // `groundFigureOnRule` puts the box on the inner rule's inner edge, so the
+    // figure touches the rule rather than standing the type's clearance inside.
+    const framed = look.groundFigureOnRule
+      ? framedFigureFrame(geometry, FRAME_INSET_IN + frameStrokeIn(look.frontFrame), 0)
+      : framedFigureFrame(geometry, FRAME_INSET_IN, FRAME_CLEARANCE_IN)
     const frame = look.groundFigureWrap
       ? wrapFigureFramePt(geometry)
       : look.groundFigureInFrame && look.frontFrame !== 'none'

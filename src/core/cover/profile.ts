@@ -87,7 +87,10 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   // its figure inside the frame, or prints a tonal plate as a positive, wants
   // volume two to do the same.
   'groundFigureInFrame',
-  'groundFigureInvert'
+  'groundFigureInvert',
+  // The collection's too: a set whose plates meet the rule wants volume two's
+  // to meet it.
+  'groundFigureOnRule'
 ]
 
 function str(v: unknown, fallback: string): string {

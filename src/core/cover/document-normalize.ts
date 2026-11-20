@@ -111,6 +111,7 @@ export function normalizeLook(raw: unknown): CoverLook {
     groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack),
     groundFigureInFrame: bool(raw['groundFigureInFrame'], d.groundFigureInFrame),
     groundFigureInvert: bool(raw['groundFigureInvert'], d.groundFigureInvert),
+    groundFigureOnRule: bool(raw['groundFigureOnRule'], d.groundFigureOnRule),
     groundFigureWrap: bool(raw['groundFigureWrap'], d.groundFigureWrap),
     groundFigureToEdge: bool(raw['groundFigureToEdge'], d.groundFigureToEdge)
   }

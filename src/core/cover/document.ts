@@ -208,7 +208,8 @@ export function defaultLook(): CoverLook {
     groundFigureWrap: false,
     groundFigureToEdge: false,
     groundFigureInFrame: false,
-    groundFigureInvert: false
+    groundFigureInvert: false,
+    groundFigureOnRule: false
   }
 }
 

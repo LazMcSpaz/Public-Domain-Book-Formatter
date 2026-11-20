@@ -165,6 +165,19 @@ export function drawFrame(
   )
 }
 
+/**
+ * How far in from its outer edge a frame's innermost line ends, in inches.
+ *
+ * The plain frame is one line; the double frame is its outer line, the gap and
+ * the inner line. Read off the same constants `drawFrame` strikes with, so a
+ * box set to it starts exactly where the ink stops.
+ */
+export function frameStrokeIn(style: FrameStyle): number {
+  if (style === 'none') return 0
+  if (style === 'plain') return FRAME_PLAIN_PT / 72
+  return (FRAME_DOUBLE_OUTER_PT + FRAME_DOUBLE_GAP_PT + FRAME_DOUBLE_INNER_PT) / 72
+}
+
 export function drawFrontFrame(
   items: CoverItem[],
   geometry: CoverGeometry,

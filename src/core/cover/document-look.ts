@@ -357,4 +357,14 @@ export interface CoverLook {
    * a tonal plate on a dark board, which would otherwise print as a negative.
    */
   groundFigureInvert: boolean
+  /**
+   * A framed figure's box runs to the inner edge of the frame's inner rule,
+   * touching it, instead of standing `FRAME_CLEARANCE_IN` inside it.
+   *
+   * For a picture with a border of its own drawn to meet the frame, where the
+   * clearance a line of type wants reads as a gap. Only meaningful with
+   * `groundFigureInFrame` and a frame; false by default, so every cover placed
+   * before it is unmoved.
+   */
+  groundFigureOnRule: boolean
 }

@@ -25,14 +25,14 @@ import {
   printedGroups
 } from '@core/cover'
 
-/** The two Hall volumes, as KDP assigned them. */
-const LECTURES_PB = '9798164602758'
-const LECTURES_HC = '9798164630898'
-const LOST_KEYS_PB = '9798164619374'
+/** Made-up ISBNs with valid check digits: no real book's numbers go in this repository. */
+const PAPERBACK = '9798000001011'
+const HARDCOVER = '9798000001028'
+const OTHER_BOOK = '9798000001035'
 
 describe('the check digit', () => {
-  it('agrees with every ISBN this shelf has been given', () => {
-    for (const isbn of [LECTURES_PB, LECTURES_HC, LOST_KEYS_PB, '9798170124800']) {
+  it('agrees with every ISBN it is given', () => {
+    for (const isbn of [PAPERBACK, HARDCOVER, OTHER_BOOK, '9798000002001']) {
       expect(ean13CheckDigit(isbn.slice(0, 12)), isbn).toBe(Number(isbn[12]))
     }
   })
@@ -40,24 +40,24 @@ describe('the check digit', () => {
   it('is computed, so a mistyped ISBN is refused rather than encoded', () => {
     // A symbol that scans to a number no book has is worse than no symbol:
     // the first is a return, the second is KDP printing its own.
-    const wrong = LECTURES_PB.slice(0, 12) + String((Number(LECTURES_PB[12]) + 1) % 10)
+    const wrong = PAPERBACK.slice(0, 12) + String((Number(PAPERBACK[12]) + 1) % 10)
     expect(encodeEan13(wrong)).toBeNull()
   })
 
   it('refuses anything that is not thirteen digits', () => {
-    expect(encodeEan13('97981646027')).toBeNull()
-    expect(encodeEan13('97981646027589')).toBeNull()
+    expect(encodeEan13('97980000010')).toBeNull()
+    expect(encodeEan13('97980000010119')).toBeNull()
     expect(encodeEan13('')).toBeNull()
   })
 
   it('reads an ISBN written with dashes', () => {
-    expect(digitsOf('979-8-16460-275-8')).toBe(LECTURES_PB)
-    expect(encodeEan13('979-8-16460-275-8')).not.toBeNull()
+    expect(digitsOf('979-8-00000-101-1')).toBe(PAPERBACK)
+    expect(encodeEan13('979-8-00000-101-1')).not.toBeNull()
   })
 })
 
 describe('the symbol', () => {
-  const encoded = encodeEan13(LECTURES_PB)!
+  const encoded = encodeEan13(PAPERBACK)!
 
   it('is ninety-five modules wide with no add-on', () => {
     expect(encoded.widthModules).toBe(SYMBOL_MODULES)
@@ -81,35 +81,35 @@ describe('the symbol', () => {
   it('encodes a different ISBN to a different pattern', () => {
     // The fault this catches is a symbol that ignores its input, which looks
     // perfectly like a barcode and scans to one wrong number for every book.
-    const other = encodeEan13(LOST_KEYS_PB)!
+    const other = encodeEan13(OTHER_BOOK)!
     const key = (e: typeof encoded) => e.bars.map((b) => `${b.from}:${b.width}`).join(',')
     expect(key(encoded)).not.toBe(key(other))
   })
 
   it('distinguishes the paperback from the hardcover of one book', () => {
-    const pb = encodeEan13(LECTURES_PB)!
-    const hc = encodeEan13(LECTURES_HC)!
+    const pb = encodeEan13(PAPERBACK)!
+    const hc = encodeEan13(HARDCOVER)!
     const key = (e: typeof pb) => e.bars.map((b) => `${b.from}:${b.width}`).join(',')
     expect(key(pb)).not.toBe(key(hc))
   })
 
   it('groups the printed digits the way EAN-13 prints them', () => {
-    const g = printedGroups(LECTURES_PB)
+    const g = printedGroups(PAPERBACK)
     expect(g.lead).toBe('9')
-    expect(g.left).toBe('798164')
-    expect(g.right).toBe('602758')
-    expect(g.lead + g.left + g.right).toBe(LECTURES_PB)
+    expect(g.left).toBe('798000')
+    expect(g.right).toBe('001011')
+    expect(g.lead + g.left + g.right).toBe(PAPERBACK)
   })
 
   it('takes a five-digit add-on and grows by it', () => {
-    const withAddOn = encodeEan13(LECTURES_PB, '90000')!
+    const withAddOn = encodeEan13(PAPERBACK, '90000')!
     expect(withAddOn.addOn).toBe('90000')
     expect(withAddOn.widthModules).toBeGreaterThan(SYMBOL_MODULES)
     expect(withAddOn.bars.length).toBeGreaterThan(encoded.bars.length)
   })
 
   it('refuses an add-on that is not five digits', () => {
-    expect(encodeEan13(LECTURES_PB, '900')).toBeNull()
+    expect(encodeEan13(PAPERBACK, '900')).toBeNull()
   })
 
   it('is about an inch and a half wide at full size', () => {
@@ -123,7 +123,7 @@ describe('the barcode on a composed cover', () => {
   const measurer = fixedWidthMeasurer(0.5)
   const withIsbn = (isbn: string, addOn = '90000'): CoverDocument => {
     const d = defaultCover('7x10', 489)
-    d.content = { ...d.content, title: 'Keys', author: 'M. P. Hall', isbn, isbnAddOn: addOn }
+    d.content = { ...d.content, title: 'Keys', author: 'A. N. Author', isbn, isbnAddOn: addOn }
     d.look = { ...d.look, palette: { ...d.look.palette, ground: '#4f5738', ink: '#f1efe2' } }
     return d
   }
@@ -136,12 +136,12 @@ describe('the barcode on a composed cover', () => {
   })
 
   it('draws bars and a background when there is one', () => {
-    const items = barcodeItems(withIsbn(LECTURES_PB))
+    const items = barcodeItems(withIsbn(PAPERBACK))
     expect(items.length).toBeGreaterThan(20)
   })
 
   it('refuses an ISBN whose check digit is wrong, and says so', () => {
-    const bad = LECTURES_PB.slice(0, 12) + String((Number(LECTURES_PB[12]) + 1) % 10)
+    const bad = PAPERBACK.slice(0, 12) + String((Number(PAPERBACK[12]) + 1) % 10)
     const composed = compose(withIsbn(bad))
     expect(composed.items.filter((i) => 'id' in i && i.id === BARCODE_ID)).toHaveLength(0)
     expect(composed.warnings.join(' ')).toMatch(/not a valid ISBN-13/)
@@ -150,7 +150,7 @@ describe('the barcode on a composed cover', () => {
   it('keeps the whole symbol inside the area KDP reserves', () => {
     // Outside it and KDP prints its own barcode over the top, which is both
     // the ugly rectangle this avoids and a symbol with another through it.
-    const d = withIsbn(LECTURES_PB)
+    const d = withIsbn(PAPERBACK)
     const { geometry } = compose(d)
     for (const item of barcodeItems(d)) {
       const x = item.xPt / 72
@@ -170,7 +170,7 @@ describe('the barcode on a composed cover', () => {
     // patch, on the board. Nothing on a barcode may sit on the cover's own
     // colour — the quiet zone is part of the symbol.
     for (const addOn of ['90000', '']) {
-      const d = withIsbn(LECTURES_PB, addOn)
+      const d = withIsbn(PAPERBACK, addOn)
       const items = barcodeItems(d)
       const patch = items.find((i) => i.kind === 'fill' && i.widthPt > 20)
       expect(patch, `add-on ${addOn || 'none'}`).toBeDefined()
@@ -202,7 +202,7 @@ describe('the barcode on a composed cover', () => {
       ['#5a2027', '#f2e9d8'],
       ['#f1efe2', '#1d2a44']
     ]) {
-      const d = withIsbn(LECTURES_PB)
+      const d = withIsbn(PAPERBACK)
       d.look = { ...d.look, palette: { ...d.look.palette, ground: ground!, ink: ink! } }
       const items = barcodeItems(d)
       const patch = items.find((i) => i.kind === 'fill' && i.widthPt > 20)
@@ -219,7 +219,7 @@ describe('the barcode on a composed cover', () => {
   it('does not make the barcode check complain about itself', () => {
     // The `isGround` lesson in the rectangle that lesson is about: a check
     // that fires on every cover which got it right is one nobody reads.
-    const d = withIsbn(LECTURES_PB)
+    const d = withIsbn(PAPERBACK)
     const report = validateCover({
       doc: d,
       composed: compose(d),
@@ -358,7 +358,7 @@ describe('decoding the symbol back to the ISBN', () => {
   it('starts every digit with a space and ends it with a bar on the left, the reverse on the right', () => {
     // The structural rule a scanner leans on to find the digits at all, and
     // the one an inverted table breaks whatever its decoder says.
-    for (const isbn of [LECTURES_PB, LOST_KEYS_PB, '9780306406157']) {
+    for (const isbn of [PAPERBACK, OTHER_BOOK, '9780306406157']) {
       const bits = bitsOf(encodeEan13(isbn)!)
       for (let i = 0; i < 6; i += 1) {
         const left = bits.slice(3 + i * 7, 10 + i * 7)
@@ -369,16 +369,16 @@ describe('decoding the symbol back to the ISBN', () => {
     }
   })
 
-  it('reads every ISBN on this shelf back out of its own bars', () => {
-    for (const isbn of [LECTURES_PB, LECTURES_HC, LOST_KEYS_PB, '9798170124800']) {
+  it('reads every ISBN back out of its own bars', () => {
+    for (const isbn of [PAPERBACK, HARDCOVER, OTHER_BOOK, '9798000002001']) {
       const encoded = encodeEan13(isbn)!
       expect(decode(bitsOf(encoded)), isbn).toBe(isbn)
     }
   })
 
   it('reads it back the same with an add-on beside it', () => {
-    const encoded = encodeEan13(LECTURES_PB, '90000')!
-    expect(decode(bitsOf(encoded))).toBe(LECTURES_PB)
+    const encoded = encodeEan13(PAPERBACK, '90000')!
+    expect(decode(bitsOf(encoded))).toBe(PAPERBACK)
   })
 
   it('carries the lead digit in the parity, where EAN-13 puts it', () => {

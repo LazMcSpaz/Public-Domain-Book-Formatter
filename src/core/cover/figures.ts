@@ -52,9 +52,6 @@ export type GroundFigure =
   | 'arcade-detailed'
   | 'all-seeing-eye'
   | 'all-seeing-eye-radiant'
-  | 'candidate-at-the-gates'
-  | 'sinnett'
-  | 'mahatma-hands'
   | 'chain-of-globes'
   | 'chain-of-globes-wide'
   | 'theosophical-seal'
@@ -66,9 +63,6 @@ export const GROUND_FIGURES: readonly GroundFigure[] = [
   'arcade-detailed',
   'all-seeing-eye',
   'all-seeing-eye-radiant',
-  'candidate-at-the-gates',
-  'sinnett',
-  'mahatma-hands',
   'chain-of-globes',
   'chain-of-globes-wide',
   'theosophical-seal'
@@ -85,43 +79,12 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'arcade-detailed': '/devices/arcade-detailed.svg',
   'all-seeing-eye': '/devices/all-seeing-eye-ground.svg',
   'all-seeing-eye-radiant': '/devices/all-seeing-eye-radiant.svg',
-  'candidate-at-the-gates': '/figures/candidate-at-the-gates.jpg',
-  sinnett: '/figures/sinnett.jpg',
-  'mahatma-hands': '/figures/mahatma-hands.png',
   'chain-of-globes': '/devices/chain-of-globes.svg',
   'chain-of-globes-wide': '/devices/chain-of-globes-wide.svg',
   'theosophical-seal': '/devices/theosophical-seal-no-svastika.svg'
 }
 
-/**
- * The figures that are a photograph rather than a trace.
- *
- * Every other figure here is black line on white, vectorised, and prints
- * sharp at any size. Knapp's plate is a halftone from a reprint: about
- * 1080 × 1450 px, so placed down a 6×9 board it resolves near 180 DPI
- * against KDP's 300, and it carries a printing screen that a trace does not.
- *
- * It is listed rather than inferred from the file name, so that admitting one
- * is a decision somebody wrote down. Two things follow for anything on this
- * list: it wants a lower tint than a trace does, because tone covers where
- * line does not; and `FIGURE_ANCHOR_X` cannot be checked against a viewBox,
- * so the anchor has to be the picture's own centre.
- */
-export const RASTER_FIGURES: readonly GroundFigure[] = [
-  'candidate-at-the-gates',
-  'sinnett',
-  'mahatma-hands'
-]
-
-/** Whether a figure's artwork is a photograph rather than vector line. */
-export function isRasterFigure(figure: GroundFigure): boolean {
-  return RASTER_FIGURES.includes(figure)
-}
-
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
-  'candidate-at-the-gates': 'The Candidate at the Gates — Knapp, for this book',
-  sinnett: 'A. P. Sinnett — the photograph, for this book',
-  'mahatma-hands': 'The Masters’ own handwriting — M. and K.H., from Barker’s facsimiles',
   'chain-of-globes': 'The chain of globes — the diagram from The Mahatma Letters',
   'chain-of-globes-wide': 'The chain of globes, turned and enlarged to run across the spine',
   'theosophical-seal': 'The Theosophical Society’s seal, without the svastika',
@@ -134,18 +97,12 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
-  'candidate-at-the-gates':
-    'J. Augustus Knapp\u2019s plate for the 1924 edition: two pillars, a chequered pavement running back in perspective, and a radiant eye over the stair. A halftone rather than a trace, so it carries tone where every other figure here carries line \u2014 which is why it wants a lower tint than they do.',
   'theosophical-seal':
     'The Society’s own seal, in the separable form that leaves out the svastika — which the Society has used since the 1880s and which a great many buyers today read as something else. Which form a book carries is the editor’s decision and `public/devices/README.md` says so; this entry is the cautious one.',
   'chain-of-globes':
     'The diagram of the planetary chain that Barker printed in facsimile in 1923: a circle cut into its globes, Globe A to Globe Z with Earth at the foot, the seven rounds numbered at the centre, the descending arc down one side and the ascending arc up the other, and the meridian struck through it all. Traced from the facsimile by `scripts/trace-device.py`, since the scan holds under five inches of drawing and a cover wants more; its box is padded so the circle\u2019s measured centre is the box\u2019s centre, and sized so the circle is about six inches across a seven-inch front. Line, not mass, so it wants a tint toward the stronger end.',
   'chain-of-globes-wide':
     'The same traced diagram for a cover that wraps: drawn in inches on a box the height of a 7 \u00d7 10 paperback sheet and twice as wide as any, its circle centred on the box and 5.9 in in radius, so that centred on the front panel it crosses the spine and runs about an inch and a quarter into the back. Turned 30 degrees clockwise at the editor\u2019s word for The Mahatma Letters. Meant for `groundFigureWrap`; on a larger sheet the composer scales it up by height, so a hardcover carries it proportionally larger.',
-  'mahatma-hands':
-    'The hands of M. and K.H. as Barker printed them in facsimile in 1923, cleaned to ink on white and laid out as a field the size of a whole cover sheet: each Master\u2019s page at its printed size, a half-step row to row and tilted a few degrees so the repeats do not line up. A picture rather than a trace, because a pen stroke\u2019s swelling is the point of it, and at 300 DPI across the sheet it prints sharp. Made by `scripts/make-handwriting-ground.py` from the facsimiles on the shelf; Damodar\u2019s covering note on the K.H. page is cut away, so the field is the Masters\u2019 writing alone. Meant to wrap the sheet at a low tint.',
-  sinnett:
-    'The 1909 photograph of the man every letter in that book was written to. A portrait has one subject and a reader knows its proportions, so it is placed inside the frame rather than bled, and it wants a low tint: a face at full strength behind a title reads as a second thing to look at.',
   'isis-winged':
     'Solid shapes, which is what a ground at five per cent needs: a mass holds its tint where a mesh of fine lines breaks up into dots.',
   'isis-winged-plain':
