@@ -26,7 +26,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
 - `storage.mjs`: big files into and out of the R2 bucket, checked by fingerprint; `lib/r2.mjs` makes the requests.
 - `work.mjs`: the agents' status notes on the shelf (start, progress, ask, done, fail, handoff, list, show); the rules are core's `work/`, the shelf side `lib/work-shelf.mjs`.
-- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names; `house-look.mjs` finds the shelf's house look; `tools-guard.mjs` refuses any write inside a copy of the tools; `workroom-fixture.mjs` is the made-up shelf of status notes `check-workroom.mjs` reads).
+- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names; `house-look.mjs` finds the shelf's house look; `tools-guard.mjs` refuses any write inside a copy of the tools; `workroom-fixture.mjs` is the made-up shelf of status notes `check-workroom.mjs` reads, `workroom-checks.mjs` its checks of the screen's manners).
 - `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
 
 ## Folder-specific rules and lessons

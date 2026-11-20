@@ -24,11 +24,12 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `house-look.ts`: the shelf's house look read, and a book laid out in the look it gets (`renderInLook`), with the running heads its structure gets (`houseHeadsForBook`).
 - `shelf.ts`, `shelf-save.ts`, `shelf-outbox.ts`, `landed.ts`: reading and writing the shelf repository.
 - `shelf-attempt.ts`: `attempt`, which names, sizes and times a failed shelf request; `blobSha`. `shelf-fetch.ts`: `reach`, the one `fetch` every shelf request makes. `shelf-request.ts`: what every shelf request carries (headers, `no-store`, the `unshared` mark). `outbox-notes.ts`: every sentence a flush shows.
-- `shelf-notes.ts`: `readWorkNotes`, the Workroom's reader: every status note listed in one git trees request, fetched by blob sha only when the cache (memory and device) lacks it.
+- `shelf-notes.ts`: `readWorkNotes`, the Workroom's reader: every status note listed in one git trees request, fetched by blob sha only when the cache (memory and device) lacks it. `note-store.ts`: the device copy, in `run-store.ts`'s database. `notes-failure.ts`: a failed read in words.
 - `query-crop.ts`: `cutQueryCrop`, a query's crop cut from the original render with its passage marked.
 - `shelf-pictures.ts`: `fetchBookPictures` (a book's named pictures) and `keptPicture` (a held picture the shelf already has), both looking where core's `pictureCandidates` says.
 - `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).
-- `run-store.ts`: the device's IndexedDB store of runs and banked looks.
+- `run-store.ts`: the device's IndexedDB database: runs, banked looks, the outbox, the Workroom's notes.
+- `settings.ts`: the settings kept in `localStorage`; a save answers a refusal in words (`device-write.ts`).
 
 ## Folder-specific rules and lessons
 
@@ -40,6 +41,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - A flush writes only over the version it read (the blob sha of the bytes read, checked before the write), and the store clears a queued entry only while it is still the one sent (`clearQueued`, `npm run check:saves`).
 - A query's mark is multiplied over the paper, never drawn over the ink (`check:crop` measures it).
 - Recon renders, uses and releases one page at a time; never hold page canvases (a 300-DPI page is about 19 MB).
+- `localStorage` is for small records the app needs (the token, the API key, preferences): anything that grows with use goes in `run-store.ts`'s database, never there; on a phone it is about 5 MB, and full it stops the token being saved (`test/workroom-device-notes.test.ts`, `npm run check:workroom`).
 - Every reader of the recon cache, app or driver, asks with `BOOK_RECON`: `loadReconCache` deletes a record it cannot use (`test/recon-wired.test.ts`).
 - Revoke every object URL you mint for crops and thumbnails; `releaseRecon` frees recon's.
 - Cleaned pixels feed only the OCR engine (`recognizeLeaf`); every crop and the second reader use the original render.

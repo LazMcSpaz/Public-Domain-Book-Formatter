@@ -48,7 +48,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 - `transcribe/`: the old vision pass (API) and the shapes a page's reading is stored in.
 - `typeset/`: the KDP checks.
 - `witness/`: two independent readings compared.
-- `work/`: the agents' status notes (one per run), the Workroom's views of them, and the screen's counts, links and sheet reading (`board.ts`, `links.ts`, `markdown.ts`).
+- `work/`: the agents' status notes (one per run), the Workroom's views of them, and the screen's counts, links, sheet reading and JSON outline (`board.ts`, `links.ts`, `markdown.ts`, `outline.ts`).
 - `wizard/`: the guided flow's steps and questions.
 
 ### Everything else

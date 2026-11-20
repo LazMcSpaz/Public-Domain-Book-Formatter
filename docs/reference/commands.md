@@ -122,8 +122,12 @@ builds its own copy.
   made-up status notes: what waits on you, each book's stage, each role's
   work (a stale run shown as stale), a job's timeline, a sheet opened
   readably, a questions link landing on the query screen, one request per
-  refresh with only new notes fetched, the phone layout, an unreadable note
-  listed, and the empty shelf. `-- --shots <folder>` also saves screenshots.
+  refresh with only new notes fetched, nothing read while the page is
+  hidden, the device copy kept in the app's database (never localStorage)
+  and trimmed, the phone layout with 44 px tap targets, one Escape closing
+  only the topmost dialog, `javascript:` links shown as words, a long JSON
+  file cut off cleanly, a rejected token named, an unreadable note listed,
+  and the empty shelf. `-- --shots <folder>` also saves screenshots.
 
 ## Opening and reading a book
 
