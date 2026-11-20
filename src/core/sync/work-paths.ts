@@ -69,7 +69,8 @@ export function shelfPathProblem(path: string): string | null {
     if (segment === '' || segment === '.' || segment === '..') {
       return why('it has an empty, "." or ".." part.')
     }
-    if (segment.toLowerCase() === '.git') {
+    // Windows drops trailing dots and spaces from a name, so ".git." is ".git".
+    if (segment.toLowerCase().replace(/[. ]+$/u, '') === '.git') {
       return why("it reaches into a .git folder, which is git's own store, not a file to open.")
     }
     if (!PATH_SEGMENT.test(segment) || segment.trim() !== segment) {

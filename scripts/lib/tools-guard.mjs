@@ -49,7 +49,12 @@ function real(target, depth = 0) {
       return join(realpathSync(probe), ...rest)
     } catch {
       const said = depth < 40 ? linkText(probe) : null
-      if (said !== null) return real(join(resolve(dirname(probe), said), ...rest), depth + 1)
+      // A relative link is read from the folder it really sits in, which may
+      // differ from the path as given when the way here ran through a link.
+      if (said !== null) {
+        const from = real(dirname(probe), depth + 1)
+        return real(join(resolve(from, said), ...rest), depth + 1)
+      }
       const up = dirname(probe)
       if (up === probe) return resolve(target)
       rest.unshift(basename(probe))
