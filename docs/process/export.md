@@ -138,10 +138,12 @@ its readiness report is the only verdict.
    (it keeps the title and description lines a person wrote at the top of
    each), `node scripts/drive.mjs corrections <book-dir>`, then check both with
    `--check`.
-8. **One commit**: `book.json`, the PDF, the EPUB and the readable files
-   together, then push and confirm `git rev-list --count origin/<branch>..HEAD`
-   prints 0. A commit that carries a book file without its exports has to be
-   remembered later.
+8. **One commit**: `book.json` and the readable files together, then push and
+   confirm `git rev-list --count origin/<branch>..HEAD` prints 0. The PDF and
+   the EPUB are not committed: the shelf ignores them (tools decision 0051).
+   The exact files that go to KDP are put in storage at upload, under the kind
+   `editions/<book folder>/<edition>`
+   ([upload.md](./upload.md)); a test export stays in scratch.
 9. **If the page count changed, the covers are stale.** A cover's spine is
    computed from the page count; see [upload.md](./upload.md) before anything
    goes to KDP.
@@ -157,8 +159,10 @@ The full list lives in one place, so the three documents cannot disagree: [check
 
 ## What it produces and where it goes
 
-`books/<dir>/<Name>.pdf` and `<Name>.epub` on the shelf, made from the
-`book.json` in the same commit; the readable files regenerated; a ledger entry,
+`books/<dir>/<Name>.pdf` and `<Name>.epub` beside the book, made from the
+`book.json` committed with them, and never committed themselves (the shelf
+ignores them; the exact files sent to KDP go to storage at upload); the
+readable files regenerated; a ledger entry,
 written by the managing editor from the typesetter's and the checker's
 reports, with the page count, the report's fields and every check result. (An export
 receipt beside each file, saying what made it, when, and what it passed, is
@@ -171,7 +175,8 @@ planned.)
 - Never accept an export on its counts alone; read every field and look at
   pages.
 - Never add a second way of drawing pages. The preview is the PDF.
-- Never commit a book file without its re-exported PDF and readable files.
+- Never commit a book file without its regenerated readable files, and never
+  commit the PDF or EPUB: they go to storage (tools decision 0051).
 - Never leave a placeholder where a note or picture could not be placed;
   report it.
 - Never hand-edit a readable file that `book-files.mjs` or
