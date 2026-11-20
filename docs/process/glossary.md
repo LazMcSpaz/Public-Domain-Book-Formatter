@@ -57,7 +57,8 @@ rounds.
 - The book is read and loaded from the shelf ([sessions.md](./sessions.md)).
 - Work in a scratch directory, not `/tmp` paths someone else might share.
 - The `etsu` and `etsu-editor` agents were loaded at session start
-  (otherwise point a general-purpose agent at the agent's file).
+  (otherwise see the fallback in
+  [README.md](./README.md#what-a-definition-locks-and-what-it-does-not)).
 - Three released books carry glossaries older than this method:
   _Clairvoyance and Occult Powers_, _The Human Aura and The Astral World_ and
   _Thought Vibration_. _The Human Aura_ and _The Astral World_ are released

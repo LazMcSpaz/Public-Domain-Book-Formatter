@@ -88,9 +88,10 @@ every fact-check.
   Without `--name` it refuses (the shelf holds two card files). Without
   `--shelf`, run from the formatter, it silently prints an empty default card.
 - **The `etsu` and `etsu-editor` agents load only at the start of a
-  session.** If one was added or changed mid-session, either start a new
-  session or point a general-purpose agent at its file and tell it to adopt
-  it.
+  session.** If one was added or changed mid-session, start a new session,
+  or point a general-purpose agent at its file and tell it to adopt it; that
+  fallback drops the definition's limits
+  ([README.md](./README.md#what-a-definition-locks-and-what-it-does-not)).
 - **Gather what the editor marked while reading**:
   `node scripts/drive.mjs reading --tag intro --json` (and `--tag note`,
   `--tag glossary`). These are the passages he actually stopped at, and they

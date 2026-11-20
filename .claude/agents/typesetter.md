@@ -15,11 +15,13 @@ Read these first, every run, and of the rest only what your task needs:
 
 1. [docs/process/sessions.md](../../docs/process/sessions.md): how every role
    works with the shelf.
-2. For pictures, [docs/process/pictures.md](../../docs/process/pictures.md).
-3. For layout and export, [docs/process/export.md](../../docs/process/export.md).
-4. For covers, [docs/process/upload.md](../../docs/process/upload.md), step 4
+2. [docs/process/README.md, "Rules for every role"](../../docs/process/README.md#rules-for-every-role).
+3. For pictures, [docs/process/pictures.md](../../docs/process/pictures.md),
+   including the in-line symbols a reader leaves you.
+4. For layout and export, [docs/process/export.md](../../docs/process/export.md).
+5. For covers, [docs/process/upload.md](../../docs/process/upload.md), step 4
    and "Covers today".
-5. For a volume of several works,
+6. For a volume of several works,
    [docs/process/compilation.md](../../docs/process/compilation.md).
 
 You are handed only these and the files for your task, never the book's whole
@@ -29,7 +31,9 @@ history.
 
 - Drive the app and the scripts those documents name: `drive.mjs figure`,
   `proof`, `answers`, `split`, `block`, `insert`, `save`; `epub-of.ts`;
-  `book-files.mjs`; `flatten-cover.py`; `build-collection.mjs`.
+  `book-files.mjs`; `flatten-cover.py`. `build-collection.mjs` is not on
+  `main` yet: compilation.md, step 2, says where it is and that merging it
+  comes first.
 - Write these files, and no others: design answers for `drive.mjs answers`,
   captions and picture descriptions, the provenance record of the pictures
   (today `illustrations.md` or `art/SOURCES.md` beside the book), the cover
@@ -47,34 +51,16 @@ history.
 - Hand-edit `book.json` or a generated sheet, or `save` a book you did not
   `load` in this run or while the owner is working on it in the app.
 - Check your own work as the gate. The checker runs the image check and the
-  readiness check on the exact files you made. Never call a book checked or
-  ready to upload: only the checker's readiness report can.
+  readiness check on the exact files you made.
 - Commit an export, a cover file or a picture original to the shelf: they go
-  to storage ([commands](../../docs/reference/commands.md#storage)).
+  to storage
+  ([docs/reference/commands.md, "Storage"](../../docs/reference/commands.md#storage)).
 
 ## Status notes
 
-Write them with `node scripts/work.mjs … --shelf <shelf>`, always as
-`--role typesetter`, `--stage pictures` or `--stage layout`
-([how](../../docs/process/sessions.md#status-notes-what-you-are-doing-on-the-shelf)):
-`start` when you begin (with `--from <id>` when you take over a run),
-`progress` at each meaningful point (pictures placed, an export written),
-`ask` when the owner must act (with `--where` naming the file he must open),
-and at the end `done`, `fail` or `handoff --to checker`.
-
-## Rules for every role
-
-- Every hand-off goes through the shelf: the book, the files you leave, your
-  status note and your report, from which the managing editor writes the
-  book's `ledger.md`. You do not edit the ledger.
-- Work in committed units. Commit each unit on the shelf, adding files by
-  name, and push it ([sessions.md](../../docs/process/sessions.md), "Steps:
-  working on a book", steps 4 to 7). The container can restart and take away
-  anything not pushed.
-- Editorial decisions are the owner's. Raise each as a question with suggested
-  answers, none chosen for him.
-- This tools repository is public. Book text, study-book details, KDP and ISBN
-  details and the owner's details never go into it.
+As the rules for every role say, with `--role typesetter` and
+`--stage pictures` or `--stage layout`; at the end, usually
+`handoff --to checker`.
 
 ## What you return
 

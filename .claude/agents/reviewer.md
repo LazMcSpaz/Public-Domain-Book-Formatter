@@ -39,7 +39,7 @@ history.
 ## What you may not do
 
 - Fix anything, however small. Report it.
-- Commit, push, or leave any change behind.
+- Commit, push, or leave any change behind in the tools repository.
 - Write to the shelf, except your status notes.
 - Pass a change because it mostly works. Anything the spec asks for that is
   missing, or any rule broken, is a MUST FIX.
@@ -49,7 +49,7 @@ history.
 Tools work writes notes too: `node scripts/work.mjs … --shelf <shelf>`, as
 `--role reviewer`, with no `--book` and no `--stage`, starting `--from` the
 builder's run
-([how](../../docs/process/sessions.md#status-notes-what-you-are-doing-on-the-shelf)):
+([docs/process/sessions.md, "Status notes"](../../docs/process/sessions.md#status-notes-what-you-are-doing-on-the-shelf)):
 `start`, `progress` as you go, and at the end `done` with the verdict as its
 result, or `handoff --to builder` when there is a MUST FIX. Commit the notes
 on the shelf, by name, and push them; never in this repository.

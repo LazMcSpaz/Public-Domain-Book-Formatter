@@ -41,25 +41,81 @@ work.
 
 Each role is an agent, defined in [.claude/agents/](../../.claude/agents/)
 under its own name, every one on Opus ([the spec](../specs/agent-roles.md)).
-A role's brief is the document named above, read after this folder's
-[sessions.md](./sessions.md). The managing editor is the chat session itself
-and has no file: it launches a role with the Agent tool and the role's name
-(`scout`, `reader`, `typesetter`, `etsu`, `etsu-editor`, `checker`, and
-`builder` and `reviewer` for changes to the tools). Claude Code loads the
+The managing editor is the chat session itself and has no file: it launches
+a role with the Agent tool and the role's name. Claude Code loads the
 definitions when a session starts, so a definition added or changed during a
-session is used by name only from the next session; until then, point a
-general-purpose agent at the file and tell it to adopt it.
+session is used by name only from the next session; until then, see the
+fallback under
+[What a definition locks](#what-a-definition-locks-and-what-it-does-not).
 
-Hand each run only its brief and the files of its task, never the book's
-whole history: tokens are saved there, not by a smaller model. Run at most
-four readers at once. No agent checks its own work: what a role makes is
-checked by the checker, Etsu's drafts by Etsu's editor, and a change to the
-tools by a reviewer that did not write it. Where a document says a check is
-done by a reader who did not do the work, that is the checker, or Etsu's
-editor for prose, and it is not optional. The managing editor writes each
-book's `ledger.md` from the runs' reports; the roles do not edit it, so runs
-working at the same time never write the same file. How the managing editor
-runs the team: [sessions.md](./sessions.md#running-the-team-the-managing-editor).
+| Role            | Definition                                            | Brief                                                                                                                          |
+| --------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| managing editor | none: the chat session itself                         | [sessions.md](./sessions.md#running-the-team-the-managing-editor)                                                              |
+| `scout`         | [scout.md](../../.claude/agents/scout.md)             | [sourcing.md](./sourcing.md)                                                                                                   |
+| `reader`        | [reader.md](../../.claude/agents/reader.md)           | [reading.md](./reading.md); a batch reader only [BRIEF-reading.md](../BRIEF-reading.md) and its batch's brief                  |
+| `checker`       | [checker.md](../../.claude/agents/checker.md)         | [checking.md](./checking.md); the image check in [pictures.md](./pictures.md); [upload.md](./upload.md), steps 1 to 3          |
+| `typesetter`    | [typesetter.md](../../.claude/agents/typesetter.md)   | [pictures.md](./pictures.md), [export.md](./export.md), [compilation.md](./compilation.md); covers in [upload.md](./upload.md) |
+| `etsu`          | [etsu.md](../../.claude/agents/etsu.md)               | [writing.md](./writing.md), [glossary.md](./glossary.md)                                                                       |
+| `etsu-editor`   | [etsu-editor.md](../../.claude/agents/etsu-editor.md) | [writing.md](./writing.md), [glossary.md](./glossary.md)                                                                       |
+| `builder`       | [builder.md](../../.claude/agents/builder.md)         | the root [CLAUDE.md](../../CLAUDE.md) and the approved spec                                                                    |
+| `reviewer`      | [reviewer.md](../../.claude/agents/reviewer.md)       | the root [CLAUDE.md](../../CLAUDE.md) and the approved spec                                                                    |
+
+A book role reads its brief with the parts of [sessions.md](./sessions.md)
+its definition names, and the rules below. Hand each run only that and the
+files of its task, never the book's whole history: tokens are saved there,
+not by a smaller model. Run at most four readers at once. No agent checks its
+own work: what a role makes is checked by the checker, Etsu's drafts by
+Etsu's editor, and a change to the tools by a reviewer that did not write it.
+Where a document says a check is done by a reader who did not do the work,
+that is the checker, or Etsu's editor for prose, and it is not optional. How
+the managing editor runs the team:
+[sessions.md](./sessions.md#running-the-team-the-managing-editor).
+
+### Rules for every role
+
+Every book role's definition points here; these hold for every run.
+
+- **Hand-offs go through the shelf**: the book, the files the run leaves, its
+  status note and its report. The managing editor writes each book's
+  `ledger.md` from the reports; a role never edits it, so runs working at the
+  same time never write the same file. Where a document says something goes
+  in the ledger, the role puts it in its report.
+- **Status notes**, with `node scripts/work.mjs … --shelf <shelf>`, under the
+  role's own name and the stage its definition gives: `start` when the run
+  begins (with `--from <id>` when it takes over, or checks, another run's
+  work), `progress` at meaningful points, `ask` when the owner must act (with
+  `--where` naming the file he must open), and at the end `done`, `fail` or
+  `handoff --to <role>`. How and when:
+  [sessions.md](./sessions.md#status-notes-what-you-are-doing-on-the-shelf).
+- **Work in committed units**: commit each unit on the shelf with its status
+  note, adding files by name, and push it
+  ([sessions.md](./sessions.md#steps-working-on-a-book), steps 4 and 7). The
+  container can restart and take away anything not pushed.
+- **Editorial decisions are the owner's.** Raise each as a question with
+  suggested answers, none chosen for him.
+- **Only the checker's readiness report calls a book checked or ready to
+  upload.** No role says it of its own work, and no note says it.
+- **This tools repository is public.** Book text, study-book details, KDP and
+  ISBN details and the owner's details never go into it; what a role writes
+  goes on the shelf or in its scratch folder.
+
+### What a definition locks, and what it does not
+
+- **The tool list is enforced.** A role cannot use a tool its definition does
+  not list: the checker and Etsu's editor have no Edit, and no role can
+  start another agent.
+- **What a role does with Bash and Write is set by its brief, not locked.**
+  Which commands it runs and which files it writes are written in its
+  definition and its process document, and nothing stops a run from going
+  past them. The checker and Etsu's editor hold Write and Bash, to run the
+  checks and write their own sheets, so they could change any file; their
+  briefs forbid them to change the book or a draft. (A hook that would
+  enforce this is a follow-up in the [cleanup plan](../cleanup-plan.md).)
+- **The general-purpose fallback drops every limit.** A general-purpose
+  agent told to read a definition and adopt it keeps none of the
+  definition's tool list and does not run on Opus unless the session does.
+  Use it only when a definition has not loaded (it was added or changed
+  during this session), and say so in the report to the owner.
 
 ## Status notes: every role, every job
 
