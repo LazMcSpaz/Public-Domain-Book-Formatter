@@ -118,6 +118,12 @@ builds its own copy.
 - `npm run check:house`: checks the design gate opens a book with no design
   of its own in the (faked) shelf's house look, on 6×9 when it is short, and
   leaves a book with a design of its own alone.
+- `npm run check:workroom`: checks the Workroom against a (faked) shelf of
+  made-up status notes: what waits on you, each book's stage, each role's
+  work (a stale run shown as stale), a job's timeline, a sheet opened
+  readably, a questions link landing on the query screen, one request per
+  refresh with only new notes fetched, the phone layout, an unreadable note
+  listed, and the empty shelf. `-- --shots <folder>` also saves screenshots.
 
 ## Opening and reading a book
 

@@ -137,11 +137,13 @@ as well as `save`, or the shelf list cannot see it.
 ## Status notes: what you are doing, on the shelf
 
 Every role leaves a status note on the shelf for each job it does, so the
-owner, and the Workroom screen once it is built, can see what is waiting on
-him, where each book stands and what each role is doing. The note sits beside
-the book's `ledger.md`; it does not replace it. Each run has its own file, so
-agents working at the same time never write the same one
-([the spec](../specs/status-notes.md)).
+owner can see, in the app's Workroom, what is waiting on him, where each book
+stands and what each role is doing. The note sits beside the book's
+`ledger.md`; it does not replace it. Each run has its own file, so agents
+working at the same time never write the same one
+([the spec](../specs/status-notes.md)). The Workroom reads the shelf's `main`
+branch, so a note shows there only once it is pushed to `main`
+([the Workroom's spec](../specs/workroom.md)).
 
 - **At the start of a job:**
   `node scripts/work.mjs start --role <role> --book <folder> --stage <stage> --job "<plain words>"`.

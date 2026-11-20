@@ -10,7 +10,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------- |
 | `src/core/`             | All the book logic, as pure code: no browser, no Node. Where the tests aim.                                                                             | only `src/core/`                     | touch the screen, files, network or `window` |
 | `src/platform/browser/` | Everything that needs a browser: PDF rendering (pdf.js), OCR (Tesseract, PaddleOCR), fonts, writing the PDF (pdf-lib), the shelf connection, the outbox | `src/core/`                          | reach into `src/app/`                        |
-| `src/app/`              | The web app: the guided flow, the question screens, the book editor and reader, the page browser, Settings                                              | `src/core/`, `src/platform/browser/` | hold book logic of its own                   |
+| `src/app/`              | The web app: the guided flow, the question screens, the book editor and reader, the page browser, Settings, the Workroom                                | `src/core/`, `src/platform/browser/` | hold book logic of its own                   |
 
 **How the boundaries are enforced:**
 
@@ -48,7 +48,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 - `transcribe/`: the old vision pass (API) and the shapes a page's reading is stored in.
 - `typeset/`: the KDP checks.
 - `witness/`: two independent readings compared.
-- `work/`: the agents' status notes (one per run) and the Workroom's views of them.
+- `work/`: the agents' status notes (one per run), the Workroom's views of them, and the screen's counts, links and sheet reading (`board.ts`, `links.ts`, `markdown.ts`).
 - `wizard/`: the guided flow's steps and questions.
 
 ### Everything else

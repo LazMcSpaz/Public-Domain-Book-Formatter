@@ -172,16 +172,22 @@ check(
 const [latePath, lateText] = lateNote()
 shelf.notes.set(latePath, lateText)
 await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
-await page.waitForSelector('[data-run="late0001"]', { timeout: 10000 })
+const arrived = await page
+  .waitForSelector('[data-run="late0001"]', { timeout: 10000 })
+  .then(() => true)
+  .catch(() => false)
 check(
-  seen.blobs === before.blobs + 1,
+  arrived && seen.blobs === before.blobs + 1,
   `a new note arrives when the page is shown again, fetched alone (${seen.blobs - before.blobs})`
 )
 const reopened = seen.blobs
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-run="late0001"]', { timeout: 10000 })
+const back = await page
+  .waitForSelector('[data-run="late0001"]', { timeout: 10000 })
+  .then(() => true)
+  .catch(() => false)
 check(
-  seen.blobs === reopened,
+  back && seen.blobs === reopened,
   `a reopened app fetches no note it already has (${seen.blobs - reopened})`
 )
 
@@ -272,6 +278,7 @@ check(
 // --- an empty shelf ---
 shelf.notes = new Map()
 await page.evaluate(() => (window.location.hash = '#workroom'))
+await page.reload({ waitUntil: 'networkidle' })
 const empty = await page
   .waitForSelector('[data-empty="true"]', { timeout: 10000 })
   .catch(() => null)

@@ -1,6 +1,6 @@
 # src/app/
 
-The React web app: the guided flow (wizard), the question screens, the book editor and reader, the page browser and Settings. It shows and collects; the decisions about the book are made in `src/core/`.
+The React web app: the guided flow (wizard), the question screens, the book editor and reader, the page browser, Settings and the Workroom. It shows and collects; the decisions about the book are made in `src/core/`.
 
 Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibilities, one task at a time.
 
@@ -23,7 +23,9 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 - `passages.ts`, `dom-offsets.ts`: the column both views build, and DOM to text offsets.
 - `PageBrowser.tsx`, `PreviewPane.tsx`: pages of the finished PDF, rendered from its bytes.
 - `house-look.ts`: `useHouseLook`, the design gate opened in the shelf's house look for a book with no design.
-- `main.tsx`: the entry; the `#preview` route (`DevPreview.tsx`) is dev-only.
+- `main.tsx`: the entry and its hash routes (`#settings`, `#workroom`); the `#preview` route (`DevPreview.tsx`) is dev-only.
+- `Workroom.tsx`: the agents' work read live from the shelf's status notes; `WorkroomCards.tsx` and `RunDetail.tsx` draw it, `workroom-live.ts` keeps it fresh, `workroom-emblems.tsx` and `workroom.css` are the approved look.
+- `ShelfFileView.tsx`, `MarkdownView.tsx`: a shelf file opened readably (Markdown, JSON, text, pictures).
 
 ## Folder-specific rules and lessons
 
@@ -33,3 +35,4 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 - A book opened to read (`readFromShelf`) has no scan or recon: saves must not need `fileDataRef`; the outbox baseline is the loaded edits.
 - Both doors from the shelf fold this device's waiting changes into the book before it is stored or drawn (`withQueuedChanges`), so a mark not yet sent stays on the page (`test/outbox-flush.test.ts`, `npm run check:saves`).
 - An empty query gate is walked through in the shell, never by `canEnter`: the proof step needs `gate-queries` completed.
+- The Workroom only reads. Its views, counts and links come from `@core/work`; a questions sheet opens through the app's own link (`#book=<folder>&at=queries`), any other file in `ShelfFileView`, never a GitHub page. A sheet's text is drawn from core's blocks, never set as HTML (`npm run check:workroom`).

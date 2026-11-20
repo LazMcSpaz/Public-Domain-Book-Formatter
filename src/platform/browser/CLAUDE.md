@@ -23,7 +23,8 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `interior.ts`, `preview.ts`: the finished interior and the design-gate preview, both from the engine's own PDF.
 - `house-look.ts`: the shelf's house look read, and a book laid out in the look it gets (`renderInLook`), with the running heads its structure gets (`houseHeadsForBook`).
 - `shelf.ts`, `shelf-save.ts`, `shelf-outbox.ts`, `landed.ts`: reading and writing the shelf repository.
-- `shelf-attempt.ts`: `attempt`, which names, sizes and times a failed shelf request; `blobSha`. `shelf-fetch.ts`: `reach`, the one `fetch` every shelf request makes. `outbox-notes.ts`: every sentence a flush shows.
+- `shelf-attempt.ts`: `attempt`, which names, sizes and times a failed shelf request; `blobSha`. `shelf-fetch.ts`: `reach`, the one `fetch` every shelf request makes. `shelf-request.ts`: what every shelf request carries (headers, `no-store`, the `unshared` mark). `outbox-notes.ts`: every sentence a flush shows.
+- `shelf-notes.ts`: `readWorkNotes`, the Workroom's reader: every status note listed in one git trees request, fetched by blob sha only when the cache (memory and device) lacks it.
 - `query-crop.ts`: `cutQueryCrop`, a query's crop cut from the original render with its passage marked.
 - `shelf-pictures.ts`: `fetchBookPictures` (a book's named pictures) and `keptPicture` (a held picture the shelf already has), both looking where core's `pictureCandidates` says.
 - `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).
@@ -31,7 +32,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 
 ## Folder-specific rules and lessons
 
-- Every shelf read goes through `readUrl` (`shelf.ts`): a unique parameter plus a counter, `no-store`, and each path segment encoded (`test/shelf-read-url.test.ts`). Never fetch a shelf path another way.
+- Every shelf read goes through `readUrl` (`shelf.ts`): a unique parameter plus a counter, `no-store`, and each path segment encoded (`test/shelf-read-url.test.ts`). Never fetch a shelf path another way. The one exception is the Workroom's git trees and blobs (`shelf-notes.ts` `gitReadUrl`), which carry the same mark and `no-store` from `shelf-request.ts`, and keep a note only if it hashes to its sha (`test/shelf-notes.test.ts`).
 - One door writes a book to the shelf (`pushBookToShelf`); pictures go to `images/<digest>.png` once, never re-inlined on each save.
 - A picture a book names is relative to the book: fetch it only with `fetchBookPictures`, never `getBytes` on the bare name.
 - Outbox flushes are chained per book (`shelf-outbox.ts`): one at a time, the next waiting rather than joining.

@@ -21,6 +21,7 @@ Most work now happens through chat sessions (owner's decision, 18 November 2026)
 6. **The shelf** shows every book as a card.
 7. **Open _The Lost Keys of Masonry_ to read.** Its seven plates show.
 8. **Rule one query and mark a few words.** Both reach the shelf.
+9. **Tap Workroom** (beside Refresh on the shelf screen). It shows what is waiting on you, each book's stage and each role's work, and says "live from the shelf" with how long ago it read. Tap a job to see its timeline; a questions sheet link opens that book's questions.
 
 ## Known issues
 

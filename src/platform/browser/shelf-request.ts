@@ -28,7 +28,7 @@ export const NO_CACHE = 'no-store' as const
  * A counter beside the clock, because the clock is not fine enough.
  *
  * `Date.now()` is milliseconds, and two reads of one path inside a millisecond
- * — a flush reading the book and then a picture, a gate fetching two crops —
+ * (a flush reading the book and then a picture, a gate fetching two crops)
  * would produce the same URL and hand the second one the first one's answer.
  * That is the whole fault again, in the small. The counter makes the property
  * hold for *every* read rather than for reads that happen to be far enough
