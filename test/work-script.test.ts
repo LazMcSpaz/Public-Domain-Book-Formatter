@@ -214,14 +214,17 @@ describe('work.mjs on a made-up shelf', () => {
 
 describe('work.mjs refuses the tools repository', () => {
   it('as the shelf, though it has a books/ folder', () => {
-    expect(existsSync(join(REPO, 'books'))).toBe(true)
-    // A book the tools do not hold, so that with the guard broken the
-    // command still stops (on the missing book) before writing anything here.
+    // A copy of the tools with a books/ folder (this repository keeps none):
+    // only the guard can stop it, and a broken guard writes nowhere near here.
+    // A book the copy does not hold, so a broken guard stops on the book.
+    const copy = join(dir, 'tools-with-books')
+    mkdirSync(join(copy, 'books', BOOK), { recursive: true })
+    writeFileSync(join(copy, 'package.json'), readFileSync(join(REPO, 'package.json')))
     const job = ['--book', 'Not-A-Book-zz9', '--stage', 'reading', '--job', 'x']
-    const r = cmd(['start', '--role', 'reader', ...job], REPO)
+    const r = cmd(['start', '--role', 'reader', ...job], copy)
     expect(r.status).toBe(1)
     expect(r.err).toMatch(/inside the tools repository .* which is public/)
-    expect(existsSync(join(REPO, 'work'))).toBe(false)
+    expect(existsSync(join(copy, 'work'))).toBe(false)
   }, 30_000)
 
   it('reached through a link from outside', () => {

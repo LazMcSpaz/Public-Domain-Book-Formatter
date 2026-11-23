@@ -11,9 +11,11 @@ name: Read a chapter
 on:
   workflow_dispatch:
     inputs:
+      # No default: no book is kept in this repository (it is public), so the
+      # path must name a book file the run can reach.
       book:
         description: Path to the book file
-        default: books/human-aura/book.json
+        required: true
       chapter:
         description: Which chapter, counting from one
         default: '1'

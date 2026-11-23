@@ -16,7 +16,7 @@
     "root": 120,
     "folder": 60
   },
-  "ignore_dirs": ["public", "screenshots", ".drive-profile", "books", "voice", "worktrees"],
+  "ignore_dirs": ["public", "screenshots", ".drive-profile", "voice", "worktrees"],
   "allowed_dependencies": [
     "@eslint/js",
     "@expo-google-fonts/cardo",

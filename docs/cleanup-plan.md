@@ -316,7 +316,7 @@ Still to do in this task: the readable sheets, scans and cards follow the one ma
 **The fix.**
 
 - Merge or close the unmerged branches: eight here and three on the shelf. Merge the cover maker (`claude/cover-front-icons`) and the compilation builder (`claude/manly-hall-manuscripts-86bvc0`); today neither script is on `main`.
-- Remove `books/` and the four stray images.
+- Remove `books/` and the four stray images. (`books/` removed 23 November 2026, spec [public-repo-cleanup](specs/public-repo-cleanup.md); the four images remain.)
 - Delete the 11 abandoned scripts.
 - Group the paused audiobook work in `audiobook/`.
 - Move book-specific one-off scripts to `scripts/one-off/<book>/`.

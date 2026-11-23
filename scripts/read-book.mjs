@@ -8,8 +8,8 @@
  * voice with its chapter number written out and this shelf's respellings
  * applied.
  *
- *   node scripts/read-book.mjs books/human-aura/book.json --chapter 1 --script
- *   node scripts/read-book.mjs books/human-aura/book.json --chapter 1 --out audio/
+ *   node scripts/read-book.mjs <shelf>/books/<folder>/book.json --chapter 1 --script
+ *   node scripts/read-book.mjs <shelf>/books/<folder>/book.json --chapter 1 --out audio/
  *
  * `--script` is the door that costs nothing: it prints what would be read,
  * every block accounted for, and the length to expect — so a chapter can be

@@ -1217,7 +1217,7 @@ interface BuildContext {
  * The ISBN lines a copyright page prints. One book is often sold in two
  * bindings, each with its own ISBN, and one interior serves both, so the
  * answer may hold several, one to a line, each with its format in brackets
- * ("9798164602758 (paperback)"). Each becomes its own "ISBN …" line: run
+ * ("9798000003015 (paperback)"). Each becomes its own "ISBN …" line: run
  * together they read as one long number.
  */
 export function isbnLines(isbn: string | null | undefined): string[] {
